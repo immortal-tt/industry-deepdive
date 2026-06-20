@@ -13,7 +13,7 @@ if [ -z "$GH_TOKEN" ]; then
   echo "✗ GH_TOKEN not set. Add it to $SCRIPT_DIR/.env"
   exit 1
 fi
-GH_USER="Tianyiliao"
+GH_USER="importal-t"
 REPO="industry-deepdive"
 DIR="$SCRIPT_DIR"
 
