@@ -1,0 +1,97 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────
+#  Industry Deep Dive — GitHub Pages Setup
+#  Run this ONCE from Terminal:
+#    cd ~/Desktop/Claude_Projects/"Industry deepdive" && bash setup_github_pages.sh
+# ─────────────────────────────────────────────────────────────
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -z "$GH_TOKEN" ] && [ -f "$SCRIPT_DIR/.env" ]; then
+  source "$SCRIPT_DIR/.env"
+fi
+
+if [ -z "$GH_TOKEN" ]; then
+  echo "✗ GH_TOKEN not set."
+  echo "  Create a token at https://github.com/settings/tokens (repo scope)"
+  echo "  then save it:  echo 'GH_TOKEN=ghp_xxx' > '$SCRIPT_DIR/.env'"
+  exit 1
+fi
+GH_USER="Tianyiliao"
+REPO="industry-deepdive"
+DIR="$SCRIPT_DIR"
+
+echo ""
+echo "🔬 Industry Deep Dive — GitHub Pages Setup"
+echo "─────────────────────────────────────────────"
+
+echo "① Creating GitHub repo '$REPO'..."
+RESPONSE=$(curl -s -X POST \
+  -H "Authorization: token $GH_TOKEN" \
+  -H "Content-Type: application/json" \
+  https://api.github.com/user/repos \
+  -d "{\"name\":\"$REPO\",\"description\":\"Industry sector deep-dive visualizations\",\"private\":false,\"auto_init\":false}")
+
+REPO_URL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('html_url',''))" 2>/dev/null)
+
+if [ -z "$REPO_URL" ]; then
+  MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('message',''))" 2>/dev/null)
+  if [[ "$MSG" == *"already exists"* ]]; then
+    echo "   → Repo already exists, continuing..."
+    REPO_URL="https://github.com/$GH_USER/$REPO"
+  else
+    echo "   ✗ Error creating repo: $MSG"
+    echo "   Full response: $RESPONSE"
+    exit 1
+  fi
+else
+  echo "   ✓ Repo created: $REPO_URL"
+fi
+
+echo "② Setting up git..."
+cd "$DIR"
+
+if [ ! -d ".git" ]; then
+  git init
+  git checkout -b main
+fi
+
+git config user.name "Market Recap Bot"
+git config user.email "$GH_USER@users.noreply.github.com"
+
+git remote remove origin 2>/dev/null || true
+git remote add origin "https://$GH_TOKEN@github.com/$GH_USER/$REPO.git"
+
+echo "③ Committing and pushing files..."
+git add -A
+git diff --cached --quiet && echo "   → Nothing new to commit" || git commit -m "🔬 Industry deep dive: $(date +'%Y-%m-%d')"
+git push -u origin main --force
+echo "   ✓ Pushed to GitHub"
+
+echo "④ Enabling GitHub Pages..."
+sleep 2
+PAGES_RESPONSE=$(curl -s -X POST \
+  -H "Authorization: token $GH_TOKEN" \
+  -H "Accept: application/vnd.github.v3+json" \
+  -H "Content-Type: application/json" \
+  "https://api.github.com/repos/$GH_USER/$REPO/pages" \
+  -d '{"source":{"branch":"main","path":"/"}}')
+
+PAGES_URL=$(echo "$PAGES_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('html_url',''))" 2>/dev/null)
+
+if [ -z "$PAGES_URL" ]; then
+  PAGES_URL="https://$(echo "$GH_USER" | tr A-Z a-z).github.io/$REPO"
+  echo "   → Pages may already be enabled (or takes a moment to activate)"
+fi
+
+echo ""
+echo "─────────────────────────────────────────────"
+echo "✅ All done!"
+echo ""
+echo "  🌐 Public URL:  https://$(echo "$GH_USER" | tr A-Z a-z).github.io/$REPO"
+echo "  📁 Repo:        $REPO_URL"
+echo "─────────────────────────────────────────────"
+echo ""
+
+echo "https://$(echo "$GH_USER" | tr A-Z a-z).github.io/$REPO" > .github_pages_url
